@@ -1,26 +1,25 @@
 """
-DIAGNÓSTICO DE DETECCIÓN
-========================
-Herramienta para calibrar la zona de detección (banner_roi) SIN enviar
-nada a Telegram.
+DIAGNÓSTICO DE DETECCIÓN (doble zona)
+=====================================
+Calibra la zona de detección SIN enviar nada a Telegram.
 
-Qué hace:
-  - Captura cada mesa definida en config/settings.py
-  - Dibuja una REGLA (números de posición en píxeles) en X (arriba) e Y
-    (izquierda), para medir exactamente dónde aparece el banner
-  - Dibuja en VERDE el rectángulo banner_roi actual
-  - Cuenta los píxeles azules (Jugador) y rojos (Banca) dentro de esa zona
-  - Aprende el "nivel normal" (baseline) de cada mesa y, cuando hay un SALTO
-    fuerte de color (un resultado real), guarda una copia con la hora en el
-    nombre: <Mesa>_RESULTADO_<hora>.png  ← esas imágenes son las importantes
-  - Imprime en consola los conteos en tiempo real
+Vigila DOS zonas en cada mesa:
+  - VERDE   = la banner_roi configurada en config/settings.py (zona actual)
+  - MAGENTA = una zona de prueba más abajo y al centro (sobre el EMPATE),
+              donde suele aparecer el banner "JUGADOR"/"BANCA"
+
+Dibuja reglas (números de posición en px) en X (arriba) e Y (izquierda).
+Aprende el nivel normal de cada zona y, cuando un color SALTA (resultado real),
+guarda <Mesa>_RESULTADO_<hora>.png con ambas zonas dibujadas.
 
 Uso:
     python diagnostico.py
 
-Deja el casino al frente 1-2 minutos. Cuando termine alguna mano, se guardará
-la imagen del resultado automáticamente. Luego Ctrl+C y compárteme las
-imágenes de la carpeta ./diagnostico/ (sobre todo las que dicen RESULTADO).
+IMPORTANTE: deja el navegador del casino EXACTAMENTE igual (misma posición,
+mismo zoom, pantalla completa) que cuando calibraste. Si lo mueves o cambias
+el zoom, las coordenadas se desajustan.
+
+Deja correr 2-3 min, Ctrl+C, y comparte las imágenes RESULTADO de ./diagnostico/
 """
 import os
 import time
@@ -33,8 +32,7 @@ from config.settings import MESAS
 
 CARPETA = "diagnostico"
 INTERVALO = 1.5
-UMBRAL = 600
-SALTO_MINIMO = 2200   # cuánto debe subir un color sobre su nivel normal para considerarlo resultado
+SALTO_MINIMO = 1500   # cuánto debe subir un color sobre su nivel normal
 
 
 def capturar(region):
@@ -47,6 +45,8 @@ def capturar(region):
 
 
 def contar_colores(recorte):
+    if recorte.size == 0:
+        return 0, 0
     hsv = cv2.cvtColor(recorte, cv2.COLOR_BGR2HSV)
     mask_azul = cv2.inRange(hsv, np.array([100, 100, 80]), np.array([135, 255, 255]))
     mask_rojo1 = cv2.inRange(hsv, np.array([0, 100, 80]), np.array([12, 255, 255]))
@@ -55,8 +55,15 @@ def contar_colores(recorte):
     return int(cv2.countNonZero(mask_azul)), int(cv2.countNonZero(mask_rojo))
 
 
+def zona_central(region):
+    """Zona de prueba: centro de la mesa, a la altura del banner."""
+    _, _, w, _ = region
+    cx = int(w * 0.36)
+    cw = int(w * 0.28)
+    return (cx, 140, cw, 52)
+
+
 def dibujar_reglas(img):
-    """Regla vertical (Y, izquierda) y horizontal (X, arriba) cada 20 px."""
     h, w = img.shape[:2]
     for yy in range(0, h, 20):
         cv2.line(img, (0, yy), (16, yy), (0, 255, 255), 1)
@@ -68,18 +75,28 @@ def dibujar_reglas(img):
                     0.32, (0, 255, 255), 1, cv2.LINE_AA)
 
 
+def evaluar(img, roi, base_a, base_r, clave):
+    x, y, w, h = roi
+    rec = img[y:y + h, x:x + w]
+    pa, pr = contar_colores(rec)
+    base_a[clave] = min(base_a.get(clave, pa), pa)
+    base_r[clave] = min(base_r.get(clave, pr), pr)
+    sa = pa - base_a[clave]
+    sr = pr - base_r[clave]
+    return pa, pr, sa, sr
+
+
 def main():
     os.makedirs(CARPETA, exist_ok=True)
-    print("=" * 55)
-    print("  DIAGNÓSTICO DE DETECCIÓN — no envía nada a Telegram")
-    print("=" * 55)
+    print("=" * 58)
+    print("  DIAGNÓSTICO DOBLE ZONA — no envía nada a Telegram")
+    print("=" * 58)
     print("Mesas:", ", ".join(m["nombre"] for m in MESAS))
-    print("Carpeta:", CARPETA + "/   |   Reglas amarillas = posiciones en px")
-    print("Se guardará <Mesa>_RESULTADO_<hora>.png cuando haya un resultado.")
+    print("VERDE = zona actual | MAGENTA = zona de prueba (centro/abajo)")
+    print("Se guarda <Mesa>_RESULTADO_<hora>.png cuando una zona salta.")
     print("Ctrl+C para detener.\n")
 
-    base_azul = {}   # nivel normal de azul por mesa
-    base_rojo = {}   # nivel normal de rojo por mesa
+    ba, br = {}, {}   # baselines por clave "mesa|zona"
 
     try:
         while True:
@@ -87,46 +104,48 @@ def main():
             for m in MESAS:
                 nombre = m["nombre"]
                 region = m["region"]
-                bx, by, bw, bh = m["banner_roi"]
+                roi_v = m["banner_roi"]
+                roi_m = zona_central(region)
 
                 img = capturar(region)
-                recorte = img[by:by + bh, bx:bx + bw]
-                px_azul, px_rojo = contar_colores(recorte)
+                va, vr, vsa, vsr = evaluar(img, roi_v, ba, br, nombre + "|V")
+                ma, mr, msa, msr = evaluar(img, roi_m, ba, br, nombre + "|M")
 
-                # Actualizar baseline como el mínimo visto (nivel "en reposo")
-                base_azul[nombre] = min(base_azul.get(nombre, px_azul), px_azul)
-                base_rojo[nombre] = min(base_rojo.get(nombre, px_rojo), px_rojo)
-                salto_azul = px_azul - base_azul[nombre]
-                salto_rojo = px_rojo - base_rojo[nombre]
+                salto_v = max(vsa, vsr)
+                salto_m = max(msa, msr)
+                es_res = salto_v > SALTO_MINIMO or salto_m > SALTO_MINIMO
 
-                es_resultado = salto_azul > SALTO_MINIMO or salto_rojo > SALTO_MINIMO
-                if es_resultado:
-                    quien = "JUGADOR" if salto_azul > salto_rojo else "BANCA"
-                else:
-                    quien = "sin resultado"
+                def color_de(sa, sr):
+                    if max(sa, sr) <= SALTO_MINIMO:
+                        return "-"
+                    return "JUGADOR" if sa > sr else "BANCA"
 
                 anotada = img.copy()
                 dibujar_reglas(anotada)
-                cv2.rectangle(anotada, (bx, by), (bx + bw, by + bh), (0, 255, 0), 2)
-                texto = (nombre + " azul=" + str(px_azul) + "(+%d)" % salto_azul +
-                         " rojo=" + str(px_rojo) + "(+%d)" % salto_rojo + " -> " + quien)
-                cv2.putText(anotada, texto, (5, 38), cv2.FONT_HERSHEY_SIMPLEX,
-                            0.4, (255, 255, 255), 1, cv2.LINE_AA)
+                cv2.rectangle(anotada, (roi_v[0], roi_v[1]),
+                              (roi_v[0] + roi_v[2], roi_v[1] + roi_v[3]), (0, 255, 0), 2)
+                cv2.rectangle(anotada, (roi_m[0], roi_m[1]),
+                              (roi_m[0] + roi_m[2], roi_m[1] + roi_m[3]), (255, 0, 255), 2)
+                linea1 = nombre + " V[verde] a=%d(+%d) r=%d(+%d) %s" % (va, vsa, vr, vsr, color_de(vsa, vsr))
+                linea2 = "  M[magenta] a=%d(+%d) r=%d(+%d) %s" % (ma, msa, mr, msr, color_de(msa, msr))
+                cv2.putText(anotada, linea1, (5, 38), cv2.FONT_HERSHEY_SIMPLEX,
+                            0.4, (0, 255, 0), 1, cv2.LINE_AA)
+                cv2.putText(anotada, linea2, (5, 54), cv2.FONT_HERSHEY_SIMPLEX,
+                            0.4, (255, 0, 255), 1, cv2.LINE_AA)
 
                 base = nombre.replace(" ", "_")
                 cv2.imwrite(os.path.join(CARPETA, base + ".png"), anotada)
-
-                if es_resultado:
+                if es_res:
                     hora = datetime.datetime.now().strftime("%H%M%S")
                     cv2.imwrite(os.path.join(CARPETA, base + "_RESULTADO_" + hora + ".png"), anotada)
 
-                print("[" + ts + "] " + texto)
-
-            print("-" * 40)
+                print("[" + ts + "] " + linea1)
+                print("           " + linea2)
+            print("-" * 45)
             time.sleep(INTERVALO)
 
     except KeyboardInterrupt:
-        print("\nDetenido. Comparte las imágenes de la carpeta:", CARPETA + "/")
+        print("\nDetenido. Comparte las imágenes RESULTADO de:", CARPETA + "/")
 
 
 if __name__ == "__main__":
