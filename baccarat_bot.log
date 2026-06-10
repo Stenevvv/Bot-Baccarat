@@ -1,0 +1,48 @@
+2026-06-10 02:08:24,248 [INFO] HTTP Request: POST https://api.telegram.org/bot8767073134:AAGWZYUZmG4k3UHVteYe7gRrl2Njkvn89yc/getMe "HTTP/1.1 200 OK"
+2026-06-10 02:08:24,250 [INFO] Iniciando mesa: Baccarat 2
+2026-06-10 02:08:24,284 [INFO] Iniciando mesa: Super 8 Baccarat
+2026-06-10 02:08:24,305 [INFO] Iniciando mesa: Baccarat 5
+2026-06-10 02:08:25,211 [INFO] HTTP Request: POST https://api.telegram.org/bot8767073134:AAGWZYUZmG4k3UHVteYe7gRrl2Njkvn89yc/sendPhoto "HTTP/1.1 200 OK"
+2026-06-10 02:08:25,214 [INFO] Señal inicial enviada: Baccarat 2
+2026-06-10 02:08:25,300 [INFO] HTTP Request: POST https://api.telegram.org/bot8767073134:AAGWZYUZmG4k3UHVteYe7gRrl2Njkvn89yc/sendPhoto "HTTP/1.1 200 OK"
+2026-06-10 02:08:25,302 [INFO] Señal inicial enviada: Super 8 Baccarat
+2026-06-10 02:08:25,388 [INFO] HTTP Request: POST https://api.telegram.org/bot8767073134:AAGWZYUZmG4k3UHVteYe7gRrl2Njkvn89yc/sendPhoto "HTTP/1.1 200 OK"
+2026-06-10 02:08:25,389 [INFO] Señal inicial enviada: Baccarat 5
+2026-06-10 02:08:28,234 [INFO] Cargando OCR (primera vez, ~30s)...
+2026-06-10 02:08:28,236 [WARNING] Using CPU. Note: This module is much faster with a GPU.
+2026-06-10 02:08:28,240 [WARNING] Downloading detection model, please wait. This may take several minutes depending upon your network connection.
+2026-06-10 02:08:33,220 [INFO] Download complete
+2026-06-10 02:08:33,221 [WARNING] Downloading recognition model, please wait. This may take several minutes depending upon your network connection.
+2026-06-10 02:08:34,298 [INFO] Download complete.
+2026-06-10 02:09:15,797 [INFO] [Baccarat 2] Resultado: JUGADOR
+2026-06-10 02:09:15,808 [INFO] [Baccarat 2] GANADA en intento 1
+2026-06-10 02:09:17,302 [INFO] HTTP Request: POST https://api.telegram.org/bot8767073134:AAGWZYUZmG4k3UHVteYe7gRrl2Njkvn89yc/sendMessage "HTTP/1.1 200 OK"
+2026-06-10 02:09:18,084 [INFO] HTTP Request: POST https://api.telegram.org/bot8767073134:AAGWZYUZmG4k3UHVteYe7gRrl2Njkvn89yc/sendPhoto "HTTP/1.1 200 OK"
+2026-06-10 02:09:20,853 [INFO] HTTP Request: POST https://api.telegram.org/bot8767073134:AAGWZYUZmG4k3UHVteYe7gRrl2Njkvn89yc/sendPhoto "HTTP/1.1 200 OK"
+2026-06-10 02:09:24,280 [INFO] [Baccarat 2] Resultado: JUGADOR
+2026-06-10 02:09:24,305 [INFO] [Baccarat 2] GANADA en intento 1
+2026-06-10 02:09:24,640 [INFO] HTTP Request: POST https://api.telegram.org/bot8767073134:AAGWZYUZmG4k3UHVteYe7gRrl2Njkvn89yc/sendMessage "HTTP/1.1 200 OK"
+2026-06-10 02:09:25,719 [INFO] HTTP Request: POST https://api.telegram.org/bot8767073134:AAGWZYUZmG4k3UHVteYe7gRrl2Njkvn89yc/sendPhoto "HTTP/1.1 200 OK"
+2026-06-10 02:09:28,417 [INFO] HTTP Request: POST https://api.telegram.org/bot8767073134:AAGWZYUZmG4k3UHVteYe7gRrl2Njkvn89yc/sendPhoto "HTTP/1.1 200 OK"
+2026-06-10 02:09:35,264 [INFO] [Baccarat 2] Resultado: JUGADOR
+2026-06-10 02:09:35,278 [INFO] [Baccarat 2] GANADA en intento 1
+2026-06-10 02:09:36,256 [INFO] HTTP Request: POST https://api.telegram.org/bot8767073134:AAGWZYUZmG4k3UHVteYe7gRrl2Njkvn89yc/sendMessage "HTTP/1.1 200 OK"
+2026-06-10 02:09:36,985 [INFO] HTTP Request: POST https://api.telegram.org/bot8767073134:AAGWZYUZmG4k3UHVteYe7gRrl2Njkvn89yc/sendPhoto "HTTP/1.1 200 OK"
+2026-06-10 02:09:39,484 [INFO] HTTP Request: POST https://api.telegram.org/bot8767073134:AAGWZYUZmG4k3UHVteYe7gRrl2Njkvn89yc/sendPhoto "HTTP/1.1 200 OK"
+2026-06-10 02:09:46,343 [INFO] [Baccarat 2] Resultado: JUGADOR
+2026-06-10 02:09:46,352 [INFO] [Baccarat 2] GANADA en intento 1
+2026-06-10 02:09:47,048 [INFO] HTTP Request: POST https://api.telegram.org/bot8767073134:AAGWZYUZmG4k3UHVteYe7gRrl2Njkvn89yc/sendMessage "HTTP/1.1 200 OK"
+2026-06-10 02:09:47,807 [INFO] HTTP Request: POST https://api.telegram.org/bot8767073134:AAGWZYUZmG4k3UHVteYe7gRrl2Njkvn89yc/sendPhoto "HTTP/1.1 200 OK"
+2026-06-10 02:09:50,479 [INFO] HTTP Request: POST https://api.telegram.org/bot8767073134:AAGWZYUZmG4k3UHVteYe7gRrl2Njkvn89yc/sendPhoto "HTTP/1.1 200 OK"
+2026-06-10 02:09:57,343 [INFO] [Baccarat 2] Resultado: JUGADOR
+2026-06-10 02:09:57,359 [INFO] [Baccarat 2] GANADA en intento 1
+2026-06-10 02:09:58,073 [INFO] HTTP Request: POST https://api.telegram.org/bot8767073134:AAGWZYUZmG4k3UHVteYe7gRrl2Njkvn89yc/sendMessage "HTTP/1.1 200 OK"
+2026-06-10 02:09:58,811 [INFO] HTTP Request: POST https://api.telegram.org/bot8767073134:AAGWZYUZmG4k3UHVteYe7gRrl2Njkvn89yc/sendPhoto "HTTP/1.1 200 OK"
+2026-06-10 02:10:01,696 [INFO] HTTP Request: POST https://api.telegram.org/bot8767073134:AAGWZYUZmG4k3UHVteYe7gRrl2Njkvn89yc/sendPhoto "HTTP/1.1 200 OK"
+2026-06-10 02:10:08,790 [INFO] [Baccarat 2] Resultado: JUGADOR
+2026-06-10 02:10:08,800 [INFO] [Baccarat 2] GANADA en intento 1
+2026-06-10 02:10:09,514 [INFO] HTTP Request: POST https://api.telegram.org/bot8767073134:AAGWZYUZmG4k3UHVteYe7gRrl2Njkvn89yc/sendMessage "HTTP/1.1 200 OK"
+2026-06-10 02:10:10,332 [INFO] HTTP Request: POST https://api.telegram.org/bot8767073134:AAGWZYUZmG4k3UHVteYe7gRrl2Njkvn89yc/sendPhoto "HTTP/1.1 200 OK"
+2026-06-10 02:10:12,982 [INFO] HTTP Request: POST https://api.telegram.org/bot8767073134:AAGWZYUZmG4k3UHVteYe7gRrl2Njkvn89yc/sendPhoto "HTTP/1.1 200 OK"
+2026-06-10 02:10:19,827 [INFO] [Baccarat 2] Resultado: JUGADOR
+2026-06-10 02:10:19,841 [INFO] [Baccarat 2] GANADA en intento 1
