@@ -80,6 +80,18 @@ CONFIRMAR_RESULTADO  = 4.0     # espera para confirmar que el banner es estable
 PAUSA_PERDIDA_GLOBAL = 1800    # 30 minutos de pausa global tras una pérdida
 COOLDOWN_RESULTADO   = 10.0    # mínimo entre dos resultados distintos
 
+# ── MODO PRUEBA ─────────────────────────────────────────────
+# True  = el bot NO envía nada a Telegram. Solo escribe en consola lo que
+#         detecta y guarda localmente (carpeta prueba_envios/) las imágenes
+#         que enviaría. Sirve para verificar la detección sin llenar el canal.
+# False = operación normal (envía a Telegram).
+MODO_PRUEBA = True
+
+# Umbral de detección del banner (píxeles del color dominante) y cuánto debe
+# dominar un color sobre el otro para considerar un resultado válido.
+UMBRAL_BANNER = 2500
+DOMINANCIA_COLOR = 1.6
+
 # Umbral de confianza del OCR (0.0 - 1.0)
 OCR_CONFIANZA_MINIMA = 0.5
 

@@ -14,3 +14,7 @@ calibracion_*.png
 
 # Carpeta de imágenes del diagnóstico
 diagnostico/
+
+
+# Imágenes del modo prueba
+prueba_envios/

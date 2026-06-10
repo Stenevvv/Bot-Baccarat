@@ -26,6 +26,9 @@ from config.settings import (
     CONFIRMAR_RESULTADO,
     PAUSA_PERDIDA_GLOBAL,
     COOLDOWN_RESULTADO,
+    MODO_PRUEBA,
+    UMBRAL_BANNER,
+    DOMINANCIA_COLOR,
 )
 
 # ── Constantes ────────────────────────────────────────────────
@@ -151,14 +154,12 @@ def capturar_bytes(region):
     return buf.tobytes()
 
 # ── Detección de banner (resultado) ───────────────────────────
-def detectar_banner(img, banner_roi):
-    """
-    Detecta JUGADOR o BANCA leyendo el color del banner iluminado.
-    Azul dominante → JUGADOR  |  Rojo dominante → BANCA
-    Retorna None si el banner no está activo (mano en curso)
-    """
+def contar_banner(img, banner_roi):
+    """Cuenta píxeles azules (Jugador) y rojos (Banca) dentro de la banner_roi."""
     x, y, w, h = banner_roi
     recorte = img[y:y+h, x:x+w]
+    if recorte.size == 0:
+        return 0, 0
     hsv = cv2.cvtColor(recorte, cv2.COLOR_BGR2HSV)
 
     # Azul (JUGADOR)
@@ -171,16 +172,25 @@ def detectar_banner(img, banner_roi):
     mask_rojo2 = cv2.inRange(hsv, np.array([168,100, 80]), np.array([180,255,255]))
     mask_rojo  = cv2.bitwise_or(mask_rojo1, mask_rojo2)
 
-    px_azul = cv2.countNonZero(mask_azul)
-    px_rojo = cv2.countNonZero(mask_rojo)
+    return cv2.countNonZero(mask_azul), cv2.countNonZero(mask_rojo)
 
-    UMBRAL = 600
-    if px_azul < UMBRAL and px_rojo < UMBRAL:
-        return None   # banner no iluminado
+def detectar_banner(img, banner_roi):
+    """
+    Detecta JUGADOR o BANCA por el color del banner de resultado.
+    Solo cuenta como resultado si un color supera UMBRAL_BANNER y ADEMÁS
+    domina al otro por un factor DOMINANCIA_COLOR (un banner real es casi
+    todo de un color; el tablero de roads tiene azul y rojo mezclados).
+    Retorna None si no hay un banner claro.
+    """
+    px_azul, px_rojo = contar_banner(img, banner_roi)
 
-    if px_azul > px_rojo:
+    if px_azul < UMBRAL_BANNER and px_rojo < UMBRAL_BANNER:
+        return None   # nada destacado
+    if px_azul > px_rojo * DOMINANCIA_COLOR:
         return JUGADOR
-    return BANCA
+    if px_rojo > px_azul * DOMINANCIA_COLOR:
+        return BANCA
+    return None       # ambos altos pero ninguno domina → ambiguo, no es banner
 
 def confirmar_resultado(region, banner_roi, intentos=4, espera=1.0):
     """
@@ -252,6 +262,14 @@ def crear_img_stats(cap_bytes, nombre, patron, paso_acierto):
 
 # ── Telegram ──────────────────────────────────────────────────
 async def enviar_foto(bot, chat_id, img_bytes, caption):
+    if MODO_PRUEBA:
+        os.makedirs("prueba_envios", exist_ok=True)
+        nombre_arch = "prueba_envios/" + str(chat_id) + "_" + time.strftime("%H%M%S") + ".png"
+        with open(nombre_arch, "wb") as f:
+            f.write(img_bytes)
+        log.info("[PRUEBA] (NO enviado a Telegram) imagen -> " + nombre_arch)
+        log.info("[PRUEBA] caption:\n" + caption)
+        return True
     try:
         await bot.send_photo(
             chat_id=chat_id,
@@ -265,6 +283,9 @@ async def enviar_foto(bot, chat_id, img_bytes, caption):
         return False
 
 async def enviar_texto(bot, chat_id, texto):
+    if MODO_PRUEBA:
+        log.info("[PRUEBA] (NO enviado a Telegram) texto: " + texto)
+        return True
     try:
         await bot.send_message(chat_id=chat_id, text=texto, parse_mode="Markdown")
         return True
@@ -332,6 +353,9 @@ async def loop_mesa(mesa_cfg, bot, estado, detector):
 
             # ── Capturar y detectar ───────────────────────────
             img_bgr = capturar(region)
+            if MODO_PRUEBA:
+                _pa, _pr = contar_banner(img_bgr, banner_roi)
+                log.info("[%s] azul=%d rojo=%d" % (nombre, _pa, _pr))
             resultado_raw = detectar_banner(img_bgr, banner_roi)
 
             if not detector.es_nuevo(resultado_raw):
@@ -368,7 +392,6 @@ async def loop_mesa(mesa_cfg, bot, estado, detector):
                     # ── GANADA ────────────────────────────────
                     log.info("[" + nombre + "] GANADA en intento " + str(paso))
                     img_stats = crear_img_stats(cap, nombre, patron, paso)
-                    await enviar_texto(bot, CANAL_ESTADISTICAS_ID, "📊 *Estadísticas WIN 365*")
                     await enviar_foto(bot, CANAL_ESTADISTICAS_ID, img_stats,
                                       caption_ganada(nombre, patron, paso))
                     # Reset secuencia
@@ -379,7 +402,6 @@ async def loop_mesa(mesa_cfg, bot, estado, detector):
                     # ── PERDIDA ───────────────────────────────
                     log.info("[" + nombre + "] PERDIDA — activando pausa global 30 min")
                     img_stats = crear_img_stats(cap, nombre, patron, paso)
-                    await enviar_texto(bot, CANAL_ESTADISTICAS_ID, "📊 *Estadísticas WIN 365*")
                     await enviar_foto(bot, CANAL_ESTADISTICAS_ID, img_stats,
                                       caption_perdida(nombre, patron))
                     activar_pausa_global()
@@ -431,12 +453,21 @@ async def main():
     print("=" * 55)
 
     bot = Bot(token=TELEGRAM_TOKEN)
-    try:
-        me = await bot.get_me()
-        print("✅ Bot conectado: @" + me.username)
-    except TelegramError as e:
-        print("❌ Error conectando: " + str(e))
-        return
+    if MODO_PRUEBA:
+        print("🧪 MODO PRUEBA ACTIVO — NO se enviará nada a Telegram.")
+        print("   (Las imágenes que enviaría se guardan en la carpeta prueba_envios/)")
+        try:
+            me = await bot.get_me()
+            print("✅ Token válido: @" + me.username)
+        except TelegramError as e:
+            print("⚠ No se pudo verificar el token (no importa en modo prueba): " + str(e))
+    else:
+        try:
+            me = await bot.get_me()
+            print("✅ Bot conectado: @" + me.username)
+        except TelegramError as e:
+            print("❌ Error conectando: " + str(e))
+            return
 
     mesas_activas = [m for m in MESAS if m.get("activa", True)]
     print("📋 Mesas: " + ", ".join(m["nombre"] for m in mesas_activas))
