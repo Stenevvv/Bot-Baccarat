@@ -92,6 +92,13 @@ MODO_PRUEBA = True
 UMBRAL_BANNER = 2500
 DOMINANCIA_COLOR = 1.6
 
+# ── ESPACIADO ENTRE SEÑALES ─────────────────────────────────
+# Tras enviar una señal al canal de señales, el bot espera un tiempo ALEATORIO
+# entre estos dos valores (en segundos) antes de permitir la siguiente señal.
+# Así no se envían muchas seguidas. 60-180 s = 1 a 3 minutos.
+ESPACIADO_SENALES_MIN = 60
+ESPACIADO_SENALES_MAX = 180
+
 # Umbral de confianza del OCR (0.0 - 1.0)
 OCR_CONFIANZA_MINIMA = 0.5
 

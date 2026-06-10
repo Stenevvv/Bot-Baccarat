@@ -29,6 +29,8 @@ from config.settings import (
     MODO_PRUEBA,
     UMBRAL_BANNER,
     DOMINANCIA_COLOR,
+    ESPACIADO_SENALES_MIN,
+    ESPACIADO_SENALES_MAX,
 )
 
 # ── Constantes ────────────────────────────────────────────────
@@ -81,6 +83,18 @@ def activar_pausa_global():
     pausa_global_hasta = time.time() + PAUSA_PERDIDA_GLOBAL
     minutos = PAUSA_PERDIDA_GLOBAL // 60
     log.info("PAUSA GLOBAL activada — " + str(minutos) + " minutos sin señales")
+
+# ── Espaciado entre señales (1-3 min) ─────────────────────────
+proxima_senal_permitida = 0.0   # timestamp del próximo momento en que se permite enviar señal
+
+def senal_permitida():
+    return time.time() >= proxima_senal_permitida
+
+def registrar_senal_enviada():
+    global proxima_senal_permitida
+    espera = random.uniform(ESPACIADO_SENALES_MIN, ESPACIADO_SENALES_MAX)
+    proxima_senal_permitida = time.time() + espera
+    log.info("Próxima señal permitida en ~" + str(int(espera)) + "s")
 
 # ── Emojis ────────────────────────────────────────────────────
 def ec(r):
@@ -422,6 +436,12 @@ async def loop_mesa(mesa_cfg, bot, estado, detector):
                     continue
 
             # ── Nueva señal ───────────────────────────────────
+            # Espaciado global: no enviar señales muy seguidas (1-3 min)
+            if not senal_permitida():
+                restante = int(proxima_senal_permitida - time.time())
+                log.info("[" + nombre + "] Oportunidad de señal, pero en espaciado — faltan " + str(restante) + "s")
+                continue
+
             # Elegir patrón basado en historial y último resultado
             patron = elegir_patron(historial, resultado)
             paso = 1
@@ -434,6 +454,7 @@ async def loop_mesa(mesa_cfg, bot, estado, detector):
             img_senal = crear_img_senal(cap, nombre, patron)
             await enviar_foto(bot, CANAL_SENALES_ID, img_senal,
                               caption_senal(nombre, patron))
+            registrar_senal_enviada()
             log.info("[" + nombre + "] Señal enviada")
 
             # Guardar estado
