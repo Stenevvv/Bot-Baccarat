@@ -1,0 +1,12 @@
+# Python
+__pycache__/
+*.pyc
+
+# Logs
+*.log
+
+# Secretos / entorno
+.env
+
+# Capturas de calibración
+calibracion_*.png

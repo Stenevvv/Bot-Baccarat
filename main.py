@@ -12,41 +12,21 @@ from PIL import Image, ImageDraw
 from telegram import Bot
 from telegram.error import TelegramError
 
-# ══════════════════════════════════════════
-TELEGRAM_TOKEN        = "8767073134:AAGWZYUZmG4k3UHVteYe7gRrl2Njkvn89yc"
-CANAL_SENALES_ID      = -1003740408493
-CANAL_ESTADISTICAS_ID = -1004218181454
-# ══════════════════════════════════════════
-
-MESAS = [
-    {
-        "nombre": "Baccarat 2",
-        "region":     (50, 305, 365, 230),
-        "banner_roi": (0, 38, 365, 50),
-        "registro_roi": (0, 0, 365, 38),
-        "activa": True,
-    },
-    {
-        "nombre": "Super 8 Baccarat",
-        "region":     (420, 305, 360, 230),
-        "banner_roi": (0, 38, 360, 50),
-        "registro_roi": (0, 0, 360, 38),
-        "activa": True,
-    },
-    {
-        "nombre": "Baccarat 5",
-        "region":     (785, 305, 345, 230),
-        "banner_roi": (0, 38, 345, 50),
-        "registro_roi": (0, 0, 345, 38),
-        "activa": True,
-    },
-]
-
-# ── Configuración de tiempos ──────────────────────────────────
-INTERVALO_CAPTURA     = 3.0    # segundos entre cada lectura de pantalla
-CONFIRMAR_RESULTADO   = 4.0    # segundos esperando para confirmar banner estable
-PAUSA_PERDIDA_GLOBAL  = 1800   # 30 minutos en segundos
-COOLDOWN_RESULTADO    = 10.0   # segundos mínimos entre resultados distintos
+# ══════════════════════════════════════════════════════════════
+#  Toda la configuración vive ahora en config/settings.py
+#  (token, canales, mesas, coordenadas y tiempos).
+#  👉 Edita SOLO ese archivo para cambiar mesas o coordenadas.
+# ══════════════════════════════════════════════════════════════
+from config.settings import (
+    TELEGRAM_TOKEN,
+    CANAL_SENALES_ID,
+    CANAL_ESTADISTICAS_ID,
+    MESAS,
+    INTERVALO_CAPTURA,
+    CONFIRMAR_RESULTADO,
+    PAUSA_PERDIDA_GLOBAL,
+    COOLDOWN_RESULTADO,
+)
 
 # ── Constantes ────────────────────────────────────────────────
 JUGADOR = "JUGADOR"

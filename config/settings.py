@@ -2,9 +2,37 @@
 #  BACCARAT BOT - CONFIGURACIÓN PRINCIPAL
 #  Edita este archivo antes de correr el bot
 # ============================================================
+import os
+
+# ── Cargador simple de archivo .env ─────────────────────────
+# Lee un archivo llamado ".env" en la raíz del proyecto (junto a main.py)
+# y carga sus variables. El archivo .env está en .gitignore, así que
+# NUNCA se sube a GitHub. Formato del .env:
+#     TELEGRAM_TOKEN=123456:ABC-tu_token
+def _cargar_env():
+    raiz = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    ruta_env = os.path.join(raiz, ".env")
+    if not os.path.exists(ruta_env):
+        return
+    with open(ruta_env, "r", encoding="utf-8") as f:
+        for linea in f:
+            linea = linea.strip()
+            if not linea or linea.startswith("#") or "=" not in linea:
+                continue
+            clave, valor = linea.split("=", 1)
+            os.environ.setdefault(clave.strip(), valor.strip().strip('"').strip("'"))
+
+_cargar_env()
 
 # ── TELEGRAM ────────────────────────────────────────────────
-TELEGRAM_TOKEN = "8767073134:AAGWZYUZmG4k3UHVteYe7gRrl2Njkvn89yc"
+# ⚠️ SEGURIDAD: el token NO se escribe aquí. Se lee del archivo .env
+# (o de una variable de entorno TELEGRAM_TOKEN).
+TELEGRAM_TOKEN = os.environ.get("TELEGRAM_TOKEN", "")
+if not TELEGRAM_TOKEN:
+    raise SystemExit(
+        "❌ Falta el token. Crea un archivo .env en la carpeta del proyecto con:\n"
+        "   TELEGRAM_TOKEN=tu_token_nuevo"
+    )
 CANAL_SENALES_ID = -1003740408493
 CANAL_ESTADISTICAS_ID = -1004218181454
 
@@ -19,23 +47,26 @@ CANAL_ESTADISTICAS_ID = -1004218181454
 # ⚠️  Debes calibrar estas coordenadas con calibrar_coordenadas.py
 #     antes de correr el bot por primera vez
 
+# ⚠️ COORDENADAS ESTIMADAS a partir de la captura (pantalla 1920x1080,
+#    vista "Baccarat Multiplay" a pantalla completa).
+#    Hay que VERIFICARLAS con calibrar_coordenadas.py (ver guía paso a paso).
 MESAS = [
     {
-        "nombre": "Baccarat 2",
-        "region":     (50, 305, 365, 230),
-        "banner_roi": (0, 38, 365, 50),
+        "nombre": "Baccarat 6",                  # mesa de la IZQUIERDA
+        "region":     (88, 395, 430, 275),        # (left, top, width, height)
+        "banner_roi": (10, 120, 410, 65),         # banner "JUGADOR"/"BANCA" al CENTRO (relativo a region)
         "activa": True,
     },
     {
-        "nombre": "Super 8 Baccarat",
-        "region":     (420, 305, 360, 230),
-        "banner_roi": (0, 38, 360, 50),
+        "nombre": "Super 8 Baccarat",             # mesa del CENTRO
+        "region":     (535, 395, 443, 275),
+        "banner_roi": (10, 120, 423, 65),
         "activa": True,
     },
     {
-        "nombre": "Baccarat 5",
-        "region":     (785, 305, 345, 230),
-        "banner_roi": (0, 38, 345, 50),
+        "nombre": "Baccarat 1",                   # mesa de la DERECHA
+        "region":     (988, 395, 444, 275),
+        "banner_roi": (10, 120, 424, 65),
         "activa": True,
     },
 ]
@@ -43,6 +74,11 @@ MESAS = [
 # ── DETECCIÓN ───────────────────────────────────────────────
 # Intervalo entre capturas en segundos
 INTERVALO_CAPTURA = 3.0
+
+# Tiempos adicionales usados por main.py (en segundos)
+CONFIRMAR_RESULTADO  = 4.0     # espera para confirmar que el banner es estable
+PAUSA_PERDIDA_GLOBAL = 1800    # 30 minutos de pausa global tras una pérdida
+COOLDOWN_RESULTADO   = 10.0    # mínimo entre dos resultados distintos
 
 # Umbral de confianza del OCR (0.0 - 1.0)
 OCR_CONFIANZA_MINIMA = 0.5
