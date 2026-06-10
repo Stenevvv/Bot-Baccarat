@@ -54,19 +54,19 @@ MESAS = [
     {
         "nombre": "Baccarat 6",                  # mesa de la IZQUIERDA
         "region":     (88, 395, 430, 275),        # (left, top, width, height)
-        "banner_roi": (10, 120, 410, 65),         # banner "JUGADOR"/"BANCA" al CENTRO (relativo a region)
+        "banner_roi": (10, 88, 410, 46),          # franja del banner "JUGADOR"/"BANCA" (arriba de los botones)
         "activa": True,
     },
     {
         "nombre": "Super 8 Baccarat",             # mesa del CENTRO
         "region":     (535, 395, 443, 275),
-        "banner_roi": (10, 120, 423, 65),
+        "banner_roi": (10, 88, 423, 46),
         "activa": True,
     },
     {
         "nombre": "Baccarat 1",                   # mesa de la DERECHA
         "region":     (988, 395, 444, 275),
-        "banner_roi": (10, 120, 424, 65),
+        "banner_roi": (10, 88, 424, 46),
         "activa": True,
     },
 ]

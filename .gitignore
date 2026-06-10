@@ -10,3 +10,7 @@ __pycache__/
 
 # Capturas de calibración
 calibracion_*.png
+
+
+# Carpeta de imágenes del diagnóstico
+diagnostico/

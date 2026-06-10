@@ -6,20 +6,22 @@ nada a Telegram.
 
 Qué hace:
   - Captura cada mesa definida en config/settings.py
-  - Dibuja en VERDE el rectángulo banner_roi (la zona donde el bot busca
+  - Dibuja una REGLA vertical (números de posición Y en píxeles) en el
+    borde izquierdo, para medir exactamente dónde aparece el banner
+  - Dibuja en VERDE el rectángulo banner_roi (zona donde el bot busca
     el banner "JUGADOR"/"BANCA")
   - Cuenta los píxeles azules (Jugador) y rojos (Banca) dentro de esa zona
-  - Escribe el veredicto sobre la imagen y la guarda en la carpeta ./diagnostico/
+  - Guarda la última imagen de cada mesa (se sobrescribe)
+  - Si detecta un posible RESULTADO, guarda además una copia con la hora
+    en el nombre (para que no se pierda el momento)
   - Imprime en consola los conteos en tiempo real
 
 Uso:
     python diagnostico.py
 
-Mientras corre, deja el casino al frente y espera a que alguna mesa muestre
-un resultado (banner azul/rojo). Luego revisa las imágenes guardadas en la
-carpeta ./diagnostico/ y compárte las que muestren un resultado.
-
-Presiona Ctrl+C para detener.
+Deja el casino al frente. Cuando veas en alguna mesa el banner rojo (BANCA)
+o azul (JUGADOR), ya quedará guardado automáticamente. Presiona Ctrl+C para
+detener y luego compárteme las imágenes de la carpeta ./diagnostico/
 """
 import os
 import time
@@ -31,8 +33,9 @@ import numpy as np
 from config.settings import MESAS
 
 CARPETA = "diagnostico"
-INTERVALO = 2.0          # segundos entre capturas
-UMBRAL = 600             # mismo umbral que usa el bot en main.py
+INTERVALO = 1.5          # segundos entre capturas
+UMBRAL = 600             # mismo umbral base que usa el bot
+GUARDExtra = 2500        # si un color supera esto y domina, se guarda copia con hora
 
 
 def capturar(region):
@@ -60,6 +63,15 @@ def veredicto(px_azul, px_rojo):
     return "JUGADOR (azul)" if px_azul > px_rojo else "BANCA (rojo)"
 
 
+def dibujar_regla(img):
+    """Dibuja una regla vertical con números de posición Y cada 20 px."""
+    h, w = img.shape[:2]
+    for yy in range(0, h, 20):
+        cv2.line(img, (0, yy), (18, yy), (0, 255, 255), 1)
+        cv2.putText(img, str(yy), (20, yy + 4), cv2.FONT_HERSHEY_SIMPLEX,
+                    0.35, (0, 255, 255), 1, cv2.LINE_AA)
+
+
 def main():
     os.makedirs(CARPETA, exist_ok=True)
     print("=" * 55)
@@ -67,6 +79,7 @@ def main():
     print("=" * 55)
     print("Mesas:", ", ".join(m["nombre"] for m in MESAS))
     print("Guardando imágenes en la carpeta:", CARPETA + "/")
+    print("La REGLA amarilla (números) sirve para medir el banner.")
     print("Presiona Ctrl+C para detener.\n")
 
     try:
@@ -82,15 +95,23 @@ def main():
                 px_azul, px_rojo = contar_colores(recorte)
                 verd = veredicto(px_azul, px_rojo)
 
-                # Dibujar la zona banner_roi en verde
                 anotada = img.copy()
+                dibujar_regla(anotada)
+                # Zona banner_roi en verde
                 cv2.rectangle(anotada, (bx, by), (bx + bw, by + bh), (0, 255, 0), 2)
                 texto = nombre + " | azul=" + str(px_azul) + " rojo=" + str(px_rojo) + " -> " + verd
-                cv2.putText(anotada, texto, (5, 18), cv2.FONT_HERSHEY_SIMPLEX,
-                            0.45, (0, 255, 0), 1, cv2.LINE_AA)
+                cv2.putText(anotada, texto, (5, 12), cv2.FONT_HERSHEY_SIMPLEX,
+                            0.4, (255, 255, 255), 1, cv2.LINE_AA)
 
-                nombre_archivo = nombre.replace(" ", "_") + ".png"
-                cv2.imwrite(os.path.join(CARPETA, nombre_archivo), anotada)
+                base = nombre.replace(" ", "_")
+                cv2.imwrite(os.path.join(CARPETA, base + ".png"), anotada)
+
+                # Guardar copia con hora si parece un resultado real
+                dom = max(px_azul, px_rojo)
+                otro = min(px_azul, px_rojo)
+                if dom > GUARDExtra and dom > 2 * max(otro, 1):
+                    hora = datetime.datetime.now().strftime("%H%M%S")
+                    cv2.imwrite(os.path.join(CARPETA, base + "_RESULTADO_" + hora + ".png"), anotada)
 
                 print("[" + ts + "] " + texto)
 
