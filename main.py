@@ -62,12 +62,20 @@ PATRONES = [
 ]
 
 # ── Logging ───────────────────────────────────────────────────
+# En Windows la consola usa cp1252 y no puede codificar emojis,
+# lo que provoca "UnicodeEncodeError". Forzamos UTF-8 con reemplazo seguro.
+try:
+    sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+    sys.stderr.reconfigure(encoding="utf-8", errors="replace")
+except Exception:
+    pass
+
 logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s [%(levelname)s] %(message)s",
     handlers=[
         logging.StreamHandler(),
-        logging.FileHandler("baccarat_bot.log"),
+        logging.FileHandler("baccarat_bot.log", encoding="utf-8"),
     ]
 )
 log = logging.getLogger("bot")

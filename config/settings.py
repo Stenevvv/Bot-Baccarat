@@ -89,7 +89,7 @@ MODO_PRUEBA = True
 
 # Umbral de detección del banner (píxeles del color dominante) y cuánto debe
 # dominar un color sobre el otro para considerar un resultado válido.
-UMBRAL_BANNER = 2500
+UMBRAL_BANNER = 2000
 DOMINANCIA_COLOR = 1.6
 
 # ── ESPACIADO ENTRE SEÑALES ─────────────────────────────────
