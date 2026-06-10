@@ -1,25 +1,28 @@
 """
-DIAGNÓSTICO DE DETECCIÓN (doble zona)
-=====================================
+DIAGNÓSTICO (modo tira de fotos)
+================================
 Calibra la zona de detección SIN enviar nada a Telegram.
 
-Vigila DOS zonas en cada mesa:
-  - VERDE   = la banner_roi configurada en config/settings.py (zona actual)
-  - MAGENTA = una zona de prueba más abajo y al centro (sobre el EMPATE),
-              donde suele aparecer el banner "JUGADOR"/"BANCA"
+IMPORTANTE: esta versión guarda UNA FOTO EN CADA CICLO (no depende de
+detectar nada). Así capturamos sí o sí el momento en que aparece el banner
+"JUGADOR"/"BANCA". Tú luego miras las miniaturas y eliges las que muestren
+un banner azul o rojo.
 
-Dibuja reglas (números de posición en px) en X (arriba) e Y (izquierda).
-Aprende el nivel normal de cada zona y, cuando un color SALTA (resultado real),
-guarda <Mesa>_RESULTADO_<hora>.png con ambas zonas dibujadas.
+Cada foto trae:
+  - Reglas amarillas (posición en píxeles) en X (arriba) e Y (izquierda)
+  - VERDE   = la banner_roi configurada en config/settings.py
+  - MAGENTA = zona de prueba al centro (sobre el EMPATE)
+  - Los conteos de azul/rojo de cada zona
+
+Las fotos se guardan en ./diagnostico/frames/ con la hora en el nombre:
+    Baccarat_1_152233.png
 
 Uso:
     python diagnostico.py
 
-IMPORTANTE: deja el navegador del casino EXACTAMENTE igual (misma posición,
-mismo zoom, pantalla completa) que cuando calibraste. Si lo mueves o cambias
-el zoom, las coordenadas se desajustan.
-
-Deja correr 2-3 min, Ctrl+C, y comparte las imágenes RESULTADO de ./diagnostico/
+Deja correr ~1 minuto con el casino al frente (sin mover ni cambiar el zoom).
+Ctrl+C para detener. Luego abre la carpeta (explorer diagnostico\\frames),
+mira las miniaturas y mándame 2-3 que muestren un banner de resultado.
 """
 import os
 import time
@@ -30,9 +33,8 @@ import numpy as np
 
 from config.settings import MESAS
 
-CARPETA = "diagnostico"
-INTERVALO = 1.5
-SALTO_MINIMO = 1500   # cuánto debe subir un color sobre su nivel normal
+CARPETA = os.path.join("diagnostico", "frames")
+INTERVALO = 2.0
 
 
 def capturar(region):
@@ -56,11 +58,8 @@ def contar_colores(recorte):
 
 
 def zona_central(region):
-    """Zona de prueba: centro de la mesa, a la altura del banner."""
     _, _, w, _ = region
-    cx = int(w * 0.36)
-    cw = int(w * 0.28)
-    return (cx, 140, cw, 52)
+    return (int(w * 0.36), 140, int(w * 0.28), 52)
 
 
 def dibujar_reglas(img):
@@ -75,31 +74,27 @@ def dibujar_reglas(img):
                     0.32, (0, 255, 255), 1, cv2.LINE_AA)
 
 
-def evaluar(img, roi, base_a, base_r, clave):
+def caja(img, roi, color, etiqueta):
     x, y, w, h = roi
-    rec = img[y:y + h, x:x + w]
-    pa, pr = contar_colores(rec)
-    base_a[clave] = min(base_a.get(clave, pa), pa)
-    base_r[clave] = min(base_r.get(clave, pr), pr)
-    sa = pa - base_a[clave]
-    sr = pr - base_r[clave]
-    return pa, pr, sa, sr
+    cv2.rectangle(img, (x, y), (x + w, y + h), color, 2)
+    cv2.putText(img, etiqueta, (x, y - 3), cv2.FONT_HERSHEY_SIMPLEX,
+                0.35, color, 1, cv2.LINE_AA)
 
 
 def main():
     os.makedirs(CARPETA, exist_ok=True)
     print("=" * 58)
-    print("  DIAGNÓSTICO DOBLE ZONA — no envía nada a Telegram")
+    print("  DIAGNÓSTICO (tira de fotos) — no envía nada a Telegram")
     print("=" * 58)
     print("Mesas:", ", ".join(m["nombre"] for m in MESAS))
-    print("VERDE = zona actual | MAGENTA = zona de prueba (centro/abajo)")
-    print("Se guarda <Mesa>_RESULTADO_<hora>.png cuando una zona salta.")
-    print("Ctrl+C para detener.\n")
+    print("Guarda UNA foto por ciclo en:", CARPETA)
+    print("Deja correr ~1 min y Ctrl+C. Luego mira las miniaturas.")
+    print()
 
-    ba, br = {}, {}   # baselines por clave "mesa|zona"
-
+    n = 0
     try:
         while True:
+            hora = datetime.datetime.now().strftime("%H%M%S")
             ts = datetime.datetime.now().strftime("%H:%M:%S")
             for m in MESAS:
                 nombre = m["nombre"]
@@ -108,44 +103,25 @@ def main():
                 roi_m = zona_central(region)
 
                 img = capturar(region)
-                va, vr, vsa, vsr = evaluar(img, roi_v, ba, br, nombre + "|V")
-                ma, mr, msa, msr = evaluar(img, roi_m, ba, br, nombre + "|M")
+                va, vr = contar_colores(img[roi_v[1]:roi_v[1] + roi_v[3], roi_v[0]:roi_v[0] + roi_v[2]])
+                ma, mr = contar_colores(img[roi_m[1]:roi_m[1] + roi_m[3], roi_m[0]:roi_m[0] + roi_m[2]])
 
-                salto_v = max(vsa, vsr)
-                salto_m = max(msa, msr)
-                es_res = salto_v > SALTO_MINIMO or salto_m > SALTO_MINIMO
-
-                def color_de(sa, sr):
-                    if max(sa, sr) <= SALTO_MINIMO:
-                        return "-"
-                    return "JUGADOR" if sa > sr else "BANCA"
-
-                anotada = img.copy()
-                dibujar_reglas(anotada)
-                cv2.rectangle(anotada, (roi_v[0], roi_v[1]),
-                              (roi_v[0] + roi_v[2], roi_v[1] + roi_v[3]), (0, 255, 0), 2)
-                cv2.rectangle(anotada, (roi_m[0], roi_m[1]),
-                              (roi_m[0] + roi_m[2], roi_m[1] + roi_m[3]), (255, 0, 255), 2)
-                linea1 = nombre + " V[verde] a=%d(+%d) r=%d(+%d) %s" % (va, vsa, vr, vsr, color_de(vsa, vsr))
-                linea2 = "  M[magenta] a=%d(+%d) r=%d(+%d) %s" % (ma, msa, mr, msr, color_de(msa, msr))
-                cv2.putText(anotada, linea1, (5, 38), cv2.FONT_HERSHEY_SIMPLEX,
-                            0.4, (0, 255, 0), 1, cv2.LINE_AA)
-                cv2.putText(anotada, linea2, (5, 54), cv2.FONT_HERSHEY_SIMPLEX,
-                            0.4, (255, 0, 255), 1, cv2.LINE_AA)
+                dibujar_reglas(img)
+                caja(img, roi_v, (0, 255, 0), "VERDE a=%d r=%d" % (va, vr))
+                caja(img, roi_m, (255, 0, 255), "MAGENTA a=%d r=%d" % (ma, mr))
 
                 base = nombre.replace(" ", "_")
-                cv2.imwrite(os.path.join(CARPETA, base + ".png"), anotada)
-                if es_res:
-                    hora = datetime.datetime.now().strftime("%H%M%S")
-                    cv2.imwrite(os.path.join(CARPETA, base + "_RESULTADO_" + hora + ".png"), anotada)
-
-                print("[" + ts + "] " + linea1)
-                print("           " + linea2)
-            print("-" * 45)
+                cv2.imwrite(os.path.join(CARPETA, base + "_" + hora + ".png"), img)
+                print("[" + ts + "] " + nombre +
+                      " | VERDE a=%d r=%d | MAGENTA a=%d r=%d" % (va, vr, ma, mr))
+            n += 1
+            print("-" * 45 + "  (fotos guardadas: %d)" % (n * len(MESAS)))
             time.sleep(INTERVALO)
 
     except KeyboardInterrupt:
-        print("\nDetenido. Comparte las imágenes RESULTADO de:", CARPETA + "/")
+        print("\nDetenido. Abre la carpeta y mira las miniaturas:")
+        print("   explorer diagnostico\\frames")
+        print("Mándame 2-3 fotos que muestren un banner azul o rojo.")
 
 
 if __name__ == "__main__":
