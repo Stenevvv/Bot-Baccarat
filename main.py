@@ -29,8 +29,12 @@ from config.settings import (
     MODO_PRUEBA,
     UMBRAL_BANNER,
     DOMINANCIA_COLOR,
-    ESPACIADO_SENALES_MIN,
-    ESPACIADO_SENALES_MAX,
+    ESPACIADO_MIN_INICIAL,
+    ESPACIADO_MAX_INICIAL,
+    ESPACIADO_INCREMENTO_CADA,
+    ESPACIADO_INCREMENTO_SEG,
+    ESPACIADO_TOPE_MAX,
+    ESPACIADO_ANTIRRAFAGA,
 )
 
 # ── Constantes ────────────────────────────────────────────────
@@ -92,17 +96,39 @@ def activar_pausa_global():
     minutos = PAUSA_PERDIDA_GLOBAL // 60
     log.info("PAUSA GLOBAL activada — " + str(minutos) + " minutos sin señales")
 
-# ── Espaciado entre señales (1-3 min) ─────────────────────────
-proxima_senal_permitida = 0.0   # timestamp del próximo momento en que se permite enviar señal
+# ── Espaciado entre señales (POR MESA, creciente con el tiempo) ─
+tiempo_inicio = time.time()      # cuándo arrancó el bot (para el espaciado creciente)
+proxima_senal_por_mesa = {}      # nombre -> timestamp del próximo permiso (individual por mesa)
+proxima_senal_global = 0.0       # anti-ráfaga: próximo permiso global entre cualquier señal
 
-def senal_permitida():
-    return time.time() >= proxima_senal_permitida
+def _rango_espaciado_actual():
+    """Rango (lo, hi) en segundos según el tiempo que lleva corriendo el bot.
+    Empieza en [MIN_INICIAL, MAX_INICIAL] y sube INCREMENTO_SEG cada
+    INCREMENTO_CADA segundos, con tope en TOPE_MAX."""
+    transcurrido = time.time() - tiempo_inicio
+    pasos = int(transcurrido // ESPACIADO_INCREMENTO_CADA)
+    lo = min(ESPACIADO_MIN_INICIAL + pasos * ESPACIADO_INCREMENTO_SEG, ESPACIADO_TOPE_MAX)
+    hi = min(ESPACIADO_MAX_INICIAL + pasos * ESPACIADO_INCREMENTO_SEG, ESPACIADO_TOPE_MAX)
+    if lo >= hi:
+        lo = max(ESPACIADO_MIN_INICIAL, hi - 15)
+    return lo, hi
 
-def registrar_senal_enviada():
-    global proxima_senal_permitida
-    espera = random.uniform(ESPACIADO_SENALES_MIN, ESPACIADO_SENALES_MAX)
-    proxima_senal_permitida = time.time() + espera
-    log.info("Próxima señal permitida en ~" + str(int(espera)) + "s")
+def senal_permitida(nombre):
+    ahora = time.time()
+    if ahora < proxima_senal_global:      # anti-ráfaga global
+        return False
+    return ahora >= proxima_senal_por_mesa.get(nombre, 0.0)
+
+def registrar_senal_enviada(nombre):
+    global proxima_senal_global
+    ahora = time.time()
+    lo, hi = _rango_espaciado_actual()
+    espera = random.uniform(lo, hi)
+    proxima_senal_por_mesa[nombre] = ahora + espera
+    if ESPACIADO_ANTIRRAFAGA > 0:
+        proxima_senal_global = ahora + ESPACIADO_ANTIRRAFAGA
+    log.info("[%s] Próxima señal de esta mesa en ~%ds (rango actual %d-%ds)"
+             % (nombre, int(espera), int(lo), int(hi)))
 
 # ── Emojis ────────────────────────────────────────────────────
 def ec(r):
@@ -444,9 +470,10 @@ async def loop_mesa(mesa_cfg, bot, estado, detector):
                     continue
 
             # ── Nueva señal ───────────────────────────────────
-            # Espaciado global: no enviar señales muy seguidas (1-3 min)
-            if not senal_permitida():
-                restante = int(proxima_senal_permitida - time.time())
+            # Espaciado POR MESA (creciente) + anti-ráfaga global
+            if not senal_permitida(nombre):
+                objetivo = max(proxima_senal_por_mesa.get(nombre, 0.0), proxima_senal_global)
+                restante = int(objetivo - time.time())
                 log.info("[" + nombre + "] Oportunidad de señal, pero en espaciado — faltan " + str(restante) + "s")
                 continue
 
@@ -462,7 +489,7 @@ async def loop_mesa(mesa_cfg, bot, estado, detector):
             img_senal = crear_img_senal(cap, nombre, patron)
             await enviar_foto(bot, CANAL_SENALES_ID, img_senal,
                               caption_senal(nombre, patron))
-            registrar_senal_enviada()
+            registrar_senal_enviada(nombre)
             log.info("[" + nombre + "] Señal enviada")
 
             # Guardar estado

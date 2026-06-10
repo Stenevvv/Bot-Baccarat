@@ -92,12 +92,18 @@ MODO_PRUEBA = True
 UMBRAL_BANNER = 2000
 DOMINANCIA_COLOR = 1.6
 
-# ── ESPACIADO ENTRE SEÑALES ─────────────────────────────────
-# Tras enviar una señal al canal de señales, el bot espera un tiempo ALEATORIO
-# entre estos dos valores (en segundos) antes de permitir la siguiente señal.
-# Así no se envían muchas seguidas. 60-180 s = 1 a 3 minutos.
-ESPACIADO_SENALES_MIN = 60
-ESPACIADO_SENALES_MAX = 180
+# ── ESPACIADO ENTRE SEÑALES (POR MESA, creciente con el tiempo) ─
+# El espaciado es INDIVIDUAL por mesa: cada mesa espera un tiempo ALEATORIO
+# entre [min, max] segundos antes de su PROPIA siguiente señal. Además ese rango
+# CRECE con el tiempo que lleva corriendo el bot (más activo al inicio, más
+# calmado luego), con tope duro. Y hay un anti-ráfaga global para que no salgan
+# dos señales casi pegadas aunque sean de mesas distintas.
+ESPACIADO_MIN_INICIAL     = 45    # s — mínimo del rango al arrancar (45 segundos)
+ESPACIADO_MAX_INICIAL     = 120   # s — máximo del rango al arrancar (2 minutos)
+ESPACIADO_INCREMENTO_CADA = 900   # s — cada 15 minutos de ejecución...
+ESPACIADO_INCREMENTO_SEG  = 30    # s — ...sube 30 s ambos extremos del rango
+ESPACIADO_TOPE_MAX        = 300   # s — tope duro: nunca esperar más de 5 minutos
+ESPACIADO_ANTIRRAFAGA     = 20    # s — mínimo entre señales de CUALQUIER mesa (0 = desactivado)
 
 # Umbral de confianza del OCR (0.0 - 1.0)
 OCR_CONFIANZA_MINIMA = 0.5
