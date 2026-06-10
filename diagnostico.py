@@ -6,22 +6,21 @@ nada a Telegram.
 
 Qué hace:
   - Captura cada mesa definida en config/settings.py
-  - Dibuja una REGLA vertical (números de posición Y en píxeles) en el
-    borde izquierdo, para medir exactamente dónde aparece el banner
-  - Dibuja en VERDE el rectángulo banner_roi (zona donde el bot busca
-    el banner "JUGADOR"/"BANCA")
+  - Dibuja una REGLA (números de posición en píxeles) en X (arriba) e Y
+    (izquierda), para medir exactamente dónde aparece el banner
+  - Dibuja en VERDE el rectángulo banner_roi actual
   - Cuenta los píxeles azules (Jugador) y rojos (Banca) dentro de esa zona
-  - Guarda la última imagen de cada mesa (se sobrescribe)
-  - Si detecta un posible RESULTADO, guarda además una copia con la hora
-    en el nombre (para que no se pierda el momento)
+  - Aprende el "nivel normal" (baseline) de cada mesa y, cuando hay un SALTO
+    fuerte de color (un resultado real), guarda una copia con la hora en el
+    nombre: <Mesa>_RESULTADO_<hora>.png  ← esas imágenes son las importantes
   - Imprime en consola los conteos en tiempo real
 
 Uso:
     python diagnostico.py
 
-Deja el casino al frente. Cuando veas en alguna mesa el banner rojo (BANCA)
-o azul (JUGADOR), ya quedará guardado automáticamente. Presiona Ctrl+C para
-detener y luego compárteme las imágenes de la carpeta ./diagnostico/
+Deja el casino al frente 1-2 minutos. Cuando termine alguna mano, se guardará
+la imagen del resultado automáticamente. Luego Ctrl+C y compárteme las
+imágenes de la carpeta ./diagnostico/ (sobre todo las que dicen RESULTADO).
 """
 import os
 import time
@@ -33,9 +32,9 @@ import numpy as np
 from config.settings import MESAS
 
 CARPETA = "diagnostico"
-INTERVALO = 1.5          # segundos entre capturas
-UMBRAL = 600             # mismo umbral base que usa el bot
-GUARDExtra = 2500        # si un color supera esto y domina, se guarda copia con hora
+INTERVALO = 1.5
+UMBRAL = 600
+SALTO_MINIMO = 2200   # cuánto debe subir un color sobre su nivel normal para considerarlo resultado
 
 
 def capturar(region):
@@ -48,7 +47,6 @@ def capturar(region):
 
 
 def contar_colores(recorte):
-    """Devuelve (px_azul, px_rojo) dentro del recorte."""
     hsv = cv2.cvtColor(recorte, cv2.COLOR_BGR2HSV)
     mask_azul = cv2.inRange(hsv, np.array([100, 100, 80]), np.array([135, 255, 255]))
     mask_rojo1 = cv2.inRange(hsv, np.array([0, 100, 80]), np.array([12, 255, 255]))
@@ -57,19 +55,17 @@ def contar_colores(recorte):
     return int(cv2.countNonZero(mask_azul)), int(cv2.countNonZero(mask_rojo))
 
 
-def veredicto(px_azul, px_rojo):
-    if px_azul < UMBRAL and px_rojo < UMBRAL:
-        return "SIN RESULTADO"
-    return "JUGADOR (azul)" if px_azul > px_rojo else "BANCA (rojo)"
-
-
-def dibujar_regla(img):
-    """Dibuja una regla vertical con números de posición Y cada 20 px."""
+def dibujar_reglas(img):
+    """Regla vertical (Y, izquierda) y horizontal (X, arriba) cada 20 px."""
     h, w = img.shape[:2]
     for yy in range(0, h, 20):
-        cv2.line(img, (0, yy), (18, yy), (0, 255, 255), 1)
-        cv2.putText(img, str(yy), (20, yy + 4), cv2.FONT_HERSHEY_SIMPLEX,
-                    0.35, (0, 255, 255), 1, cv2.LINE_AA)
+        cv2.line(img, (0, yy), (16, yy), (0, 255, 255), 1)
+        cv2.putText(img, str(yy), (18, yy + 4), cv2.FONT_HERSHEY_SIMPLEX,
+                    0.32, (0, 255, 255), 1, cv2.LINE_AA)
+    for xx in range(0, w, 40):
+        cv2.line(img, (xx, 0), (xx, 12), (0, 255, 255), 1)
+        cv2.putText(img, str(xx), (xx + 2, 24), cv2.FONT_HERSHEY_SIMPLEX,
+                    0.32, (0, 255, 255), 1, cv2.LINE_AA)
 
 
 def main():
@@ -78,9 +74,12 @@ def main():
     print("  DIAGNÓSTICO DE DETECCIÓN — no envía nada a Telegram")
     print("=" * 55)
     print("Mesas:", ", ".join(m["nombre"] for m in MESAS))
-    print("Guardando imágenes en la carpeta:", CARPETA + "/")
-    print("La REGLA amarilla (números) sirve para medir el banner.")
-    print("Presiona Ctrl+C para detener.\n")
+    print("Carpeta:", CARPETA + "/   |   Reglas amarillas = posiciones en px")
+    print("Se guardará <Mesa>_RESULTADO_<hora>.png cuando haya un resultado.")
+    print("Ctrl+C para detener.\n")
+
+    base_azul = {}   # nivel normal de azul por mesa
+    base_rojo = {}   # nivel normal de rojo por mesa
 
     try:
         while True:
@@ -93,23 +92,31 @@ def main():
                 img = capturar(region)
                 recorte = img[by:by + bh, bx:bx + bw]
                 px_azul, px_rojo = contar_colores(recorte)
-                verd = veredicto(px_azul, px_rojo)
+
+                # Actualizar baseline como el mínimo visto (nivel "en reposo")
+                base_azul[nombre] = min(base_azul.get(nombre, px_azul), px_azul)
+                base_rojo[nombre] = min(base_rojo.get(nombre, px_rojo), px_rojo)
+                salto_azul = px_azul - base_azul[nombre]
+                salto_rojo = px_rojo - base_rojo[nombre]
+
+                es_resultado = salto_azul > SALTO_MINIMO or salto_rojo > SALTO_MINIMO
+                if es_resultado:
+                    quien = "JUGADOR" if salto_azul > salto_rojo else "BANCA"
+                else:
+                    quien = "sin resultado"
 
                 anotada = img.copy()
-                dibujar_regla(anotada)
-                # Zona banner_roi en verde
+                dibujar_reglas(anotada)
                 cv2.rectangle(anotada, (bx, by), (bx + bw, by + bh), (0, 255, 0), 2)
-                texto = nombre + " | azul=" + str(px_azul) + " rojo=" + str(px_rojo) + " -> " + verd
-                cv2.putText(anotada, texto, (5, 12), cv2.FONT_HERSHEY_SIMPLEX,
+                texto = (nombre + " azul=" + str(px_azul) + "(+%d)" % salto_azul +
+                         " rojo=" + str(px_rojo) + "(+%d)" % salto_rojo + " -> " + quien)
+                cv2.putText(anotada, texto, (5, 38), cv2.FONT_HERSHEY_SIMPLEX,
                             0.4, (255, 255, 255), 1, cv2.LINE_AA)
 
                 base = nombre.replace(" ", "_")
                 cv2.imwrite(os.path.join(CARPETA, base + ".png"), anotada)
 
-                # Guardar copia con hora si parece un resultado real
-                dom = max(px_azul, px_rojo)
-                otro = min(px_azul, px_rojo)
-                if dom > GUARDExtra and dom > 2 * max(otro, 1):
+                if es_resultado:
                     hora = datetime.datetime.now().strftime("%H%M%S")
                     cv2.imwrite(os.path.join(CARPETA, base + "_RESULTADO_" + hora + ".png"), anotada)
 
@@ -119,7 +126,7 @@ def main():
             time.sleep(INTERVALO)
 
     except KeyboardInterrupt:
-        print("\nDetenido. Revisa las imágenes en la carpeta:", CARPETA + "/")
+        print("\nDetenido. Comparte las imágenes de la carpeta:", CARPETA + "/")
 
 
 if __name__ == "__main__":
