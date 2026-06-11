@@ -210,13 +210,9 @@ def confirmar_resultado(region, banner_roi, intentos=3, espera=0.4):
 
 # ── Creación de imágenes ──────────────────────────────────────
 def crear_img_senal(cap_bytes, nombre, patron):
-    """Captura + barra inferior con el patrón. El nombre de la mesa es el ORIGINAL de la captura."""
     img = Image.open(io.BytesIO(cap_bytes)).convert("RGB")
-    draw = ImageDraw.Draw(img)
     w, h = img.size
-    draw.rectangle([0, h-38, w, h], fill=(0, 0, 0))
-    seq = "  ".join(str(i+1)+"."+ec(p) for i, p in enumerate(patron))
-    draw.text((w//2, h-19), seq, fill=(255, 255, 255), anchor="mm")
+    img = img.crop((0, 0, w, h - 38))   # recorta la franja inferior (1000 COP / ID)
     buf = io.BytesIO()
     img.save(buf, format="PNG")
     return buf.getvalue()
@@ -224,6 +220,8 @@ def crear_img_senal(cap_bytes, nombre, patron):
 def crear_img_stats(cap_bytes, nombre, patron, paso_acierto):
     """Captura tal cual (con el nombre ORIGINAL de la mesa y el banner ganador)."""
     img = Image.open(io.BytesIO(cap_bytes)).convert("RGB")
+    w, h = img.size
+    img = img.crop((0, 0, w, h - 38))   # recorta la franja inferior (1000 COP / ID)
     buf = io.BytesIO()
     img.save(buf, format="PNG")
     return buf.getvalue()
