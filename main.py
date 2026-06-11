@@ -13,9 +13,7 @@ from telegram import Bot
 from telegram.error import TelegramError
 
 # ══════════════════════════════════════════════════════════════
-#  Toda la configuración vive ahora en config/settings.py
-#  (token, canales, mesas, coordenadas y tiempos).
-#  👉 Edita SOLO ese archivo para cambiar mesas o coordenadas.
+#  Toda la configuración vive en config/settings.py
 # ══════════════════════════════════════════════════════════════
 from config.settings import (
     TELEGRAM_TOKEN,
@@ -43,31 +41,19 @@ BANCA   = "BANCA"
 EMPATE  = "EMPATE"
 PASOS   = 6
 
-# ── 6 Patrones Martingala ─────────────────────────────────────
-# Basados en tendencias reales del baccarat:
-# J=Jugador (🔵)  B=Banca (🔴)
-# Cada patrón tiene lógica propia explicada abajo
 J = JUGADOR
 B = BANCA
 
 PATRONES = [
-    # Patrón 1: Seguir tendencia — empezar con el último ganador 2 veces, luego alternar
     [J, J, B, B, J, B],
-    # Patrón 2: Inverso — empezar con el opuesto al último ganador
     [B, B, J, J, B, J],
-    # Patrón 3: Alternado puro empezando jugador
     [J, B, J, B, J, B],
-    # Patrón 4: Alternado puro empezando banca
     [B, J, B, J, B, J],
-    # Patrón 5: Rachas de 3
     [J, J, J, B, B, B],
-    # Patrón 6: Rachas de 3 inverso
     [B, B, B, J, J, J],
 ]
 
-# ── Logging ───────────────────────────────────────────────────
-# En Windows la consola usa cp1252 y no puede codificar emojis,
-# lo que provoca "UnicodeEncodeError". Forzamos UTF-8 con reemplazo seguro.
+# ── Logging (UTF-8 para que la consola de Windows no falle con emojis) ─
 try:
     sys.stdout.reconfigure(encoding="utf-8", errors="replace")
     sys.stderr.reconfigure(encoding="utf-8", errors="replace")
@@ -85,7 +71,7 @@ logging.basicConfig(
 log = logging.getLogger("bot")
 
 # ── Pausa global ──────────────────────────────────────────────
-pausa_global_hasta = 0.0   # timestamp hasta donde todas las mesas pausan
+pausa_global_hasta = 0.0
 
 def en_pausa_global():
     return time.time() < pausa_global_hasta
@@ -96,15 +82,12 @@ def activar_pausa_global():
     minutos = PAUSA_PERDIDA_GLOBAL // 60
     log.info("PAUSA GLOBAL activada — " + str(minutos) + " minutos sin señales")
 
-# ── Espaciado entre señales (POR MESA, creciente con el tiempo) ─
-tiempo_inicio = time.time()      # cuándo arrancó el bot (para el espaciado creciente)
-proxima_senal_por_mesa = {}      # nombre -> timestamp del próximo permiso (individual por mesa)
-proxima_senal_global = 0.0       # anti-ráfaga: próximo permiso global entre cualquier señal
+# ── Espaciado entre señales (POR MESA, creciente; arranca al RESOLVERSE) ─
+tiempo_inicio = time.time()
+proxima_senal_por_mesa = {}
+proxima_senal_global = 0.0
 
 def _rango_espaciado_actual():
-    """Rango (lo, hi) en segundos según el tiempo que lleva corriendo el bot.
-    Empieza en [MIN_INICIAL, MAX_INICIAL] y sube INCREMENTO_SEG cada
-    INCREMENTO_CADA segundos, con tope en TOPE_MAX."""
     transcurrido = time.time() - tiempo_inicio
     pasos = int(transcurrido // ESPACIADO_INCREMENTO_CADA)
     lo = min(ESPACIADO_MIN_INICIAL + pasos * ESPACIADO_INCREMENTO_SEG, ESPACIADO_TOPE_MAX)
@@ -115,19 +98,20 @@ def _rango_espaciado_actual():
 
 def senal_permitida(nombre):
     ahora = time.time()
-    if ahora < proxima_senal_global:      # anti-ráfaga global
+    if ahora < proxima_senal_global:
         return False
     return ahora >= proxima_senal_por_mesa.get(nombre, 0.0)
 
-def registrar_senal_enviada(nombre):
+def marcar_antirrafaga():
     global proxima_senal_global
-    ahora = time.time()
+    if ESPACIADO_ANTIRRAFAGA > 0:
+        proxima_senal_global = time.time() + ESPACIADO_ANTIRRAFAGA
+
+def iniciar_lapso_mesa(nombre):
     lo, hi = _rango_espaciado_actual()
     espera = random.uniform(lo, hi)
-    proxima_senal_por_mesa[nombre] = ahora + espera
-    if ESPACIADO_ANTIRRAFAGA > 0:
-        proxima_senal_global = ahora + ESPACIADO_ANTIRRAFAGA
-    log.info("[%s] Próxima señal de esta mesa en ~%ds (rango actual %d-%ds)"
+    proxima_senal_por_mesa[nombre] = time.time() + espera
+    log.info("[%s] Apuesta resuelta - proxima senal de esta mesa en ~%ds (rango %d-%ds)"
              % (nombre, int(espera), int(lo), int(hi)))
 
 # ── Emojis ────────────────────────────────────────────────────
@@ -141,50 +125,31 @@ def opuesto(r):
 
 # ── Selección de patrón ───────────────────────────────────────
 def elegir_patron(historial, ultimo_resultado):
-    """
-    Elige el patrón más apropiado según el historial reciente.
-    Lógica:
-    - Si hay racha de 3+ del mismo color → usar patrón de racha opuesta
-    - Si hay alternancia → usar patrón alternado
-    - Si no hay patrón claro → aleatorio entre los 6
-    Luego adapta el patrón al último resultado (rota J/B según corresponda)
-    """
     validos = [r for r in historial if r != EMPATE]
-
     patron_base = None
-
     if len(validos) >= 3:
         ultimos3 = validos[-3:]
-        # Racha de 3 del mismo → apostar al opuesto en patrón de racha
         if all(r == ultimos3[0] for r in ultimos3):
             if ultimos3[0] == JUGADOR:
-                patron_base = PATRONES[5]  # rachas de 3 empezando banca
+                patron_base = PATRONES[5]
             else:
-                patron_base = PATRONES[4]  # rachas de 3 empezando jugador
+                patron_base = PATRONES[4]
         else:
-            # Verificar alternancia en últimas 4
             ultimos4 = validos[-4:] if len(validos) >= 4 else validos
             alternando = all(ultimos4[i] != ultimos4[i+1] for i in range(len(ultimos4)-1))
             if alternando:
-                # Si alterna, seguir alternando desde el último
                 if ultimo_resultado == JUGADOR:
-                    patron_base = PATRONES[3]  # alternado empezando banca
+                    patron_base = PATRONES[3]
                 else:
-                    patron_base = PATRONES[2]  # alternado empezando jugador
-
-    # Si no se detectó patrón claro → aleatorio
+                    patron_base = PATRONES[2]
     if patron_base is None:
         patron_base = random.choice(PATRONES)
-
-    # Adaptar: si el último fue BANCA y el patrón empieza con JUGADOR → invertir
-    # Esto orienta el patrón hacia la tendencia actual
     if ultimo_resultado == BANCA and patron_base[0] == JUGADOR:
         patron_adaptado = [opuesto(p) for p in patron_base]
     elif ultimo_resultado == JUGADOR and patron_base[0] == BANCA:
         patron_adaptado = [opuesto(p) for p in patron_base]
     else:
         patron_adaptado = patron_base[:]
-
     return patron_adaptado
 
 # ── Captura ───────────────────────────────────────────────────
@@ -203,49 +168,35 @@ def capturar_bytes(region):
 
 # ── Detección de banner (resultado) ───────────────────────────
 def contar_banner(img, banner_roi):
-    """Cuenta píxeles azules (Jugador) y rojos (Banca) dentro de la banner_roi."""
+    """Cuenta píxeles azul (Jugador), rojo (Banca) y verde (Empate) en la ROI."""
     x, y, w, h = banner_roi
     recorte = img[y:y+h, x:x+w]
     if recorte.size == 0:
-        return 0, 0
+        return 0, 0, 0
     hsv = cv2.cvtColor(recorte, cv2.COLOR_BGR2HSV)
-
-    # Azul (JUGADOR)
-    mask_azul = cv2.inRange(hsv,
-        np.array([100, 100, 80]),
-        np.array([135, 255, 255]))
-
-    # Rojo (BANCA) — dos rangos por wrap HSV
+    mask_azul = cv2.inRange(hsv, np.array([100, 100, 80]), np.array([135, 255, 255]))
     mask_rojo1 = cv2.inRange(hsv, np.array([0, 100, 80]),  np.array([12, 255, 255]))
     mask_rojo2 = cv2.inRange(hsv, np.array([168,100, 80]), np.array([180,255,255]))
     mask_rojo  = cv2.bitwise_or(mask_rojo1, mask_rojo2)
-
-    return cv2.countNonZero(mask_azul), cv2.countNonZero(mask_rojo)
+    mask_verde = cv2.inRange(hsv, np.array([40, 80, 60]), np.array([90, 255, 255]))
+    return cv2.countNonZero(mask_azul), cv2.countNonZero(mask_rojo), cv2.countNonZero(mask_verde)
 
 def detectar_banner(img, banner_roi):
-    """
-    Detecta JUGADOR o BANCA por el color del banner de resultado.
-    Solo cuenta como resultado si un color supera UMBRAL_BANNER y ADEMÁS
-    domina al otro por un factor DOMINANCIA_COLOR (un banner real es casi
-    todo de un color; el tablero de roads tiene azul y rojo mezclados).
-    Retorna None si no hay un banner claro.
-    """
-    px_azul, px_rojo = contar_banner(img, banner_roi)
-
+    """JUGADOR (azul) / BANCA (rojo) / EMPATE (verde) / None (sin banner)."""
+    px_azul, px_rojo, px_verde = contar_banner(img, banner_roi)
+    # Empate (verde dominante) — es un PUSH: ni gana ni pierde
+    if px_verde > UMBRAL_BANNER and px_verde > px_azul and px_verde > px_rojo:
+        return EMPATE
     if px_azul < UMBRAL_BANNER and px_rojo < UMBRAL_BANNER:
-        return None   # nada destacado
+        return None
     if px_azul > px_rojo * DOMINANCIA_COLOR:
         return JUGADOR
     if px_rojo > px_azul * DOMINANCIA_COLOR:
         return BANCA
-    return None       # ambos altos pero ninguno domina → ambiguo, no es banner
+    return None
 
-def confirmar_resultado(region, banner_roi, intentos=4, espera=1.0):
-    """
-    Captura varias veces para confirmar que el banner está estable.
-    Evita falsos positivos durante transiciones.
-    Retorna el resultado si se confirma, None si no.
-    """
+def confirmar_resultado(region, banner_roi, intentos=3, espera=0.4):
+    """Confirma rápido (mientras el banner sigue visible). Devuelve el más frecuente."""
     resultados = []
     for _ in range(intentos):
         img = capturar(region)
@@ -253,57 +204,26 @@ def confirmar_resultado(region, banner_roi, intentos=4, espera=1.0):
         if r:
             resultados.append(r)
         time.sleep(espera)
-
     if not resultados:
         return None
-
-    # Mayoría simple
-    conteo = {JUGADOR: resultados.count(JUGADOR), BANCA: resultados.count(BANCA)}
-    ganador = max(conteo, key=conteo.get)
-    if conteo[ganador] >= (intentos // 2 + 1):
-        return ganador
-    return None
+    return max(set(resultados), key=resultados.count)
 
 # ── Creación de imágenes ──────────────────────────────────────
 def crear_img_senal(cap_bytes, nombre, patron):
-    """
-    Imagen de señal:
-    - Captura real del banner del resultado anterior
-    - Nombre de la mesa
-    - Patrón de 6 pasos (sin texto extra)
-    """
+    """Captura + barra inferior con el patrón. El nombre de la mesa es el ORIGINAL de la captura."""
     img = Image.open(io.BytesIO(cap_bytes)).convert("RGB")
     draw = ImageDraw.Draw(img)
     w, h = img.size
-
-    # Barra superior con nombre de mesa
-    draw.rectangle([0, 0, w, 30], fill=(10, 10, 20))
-    draw.text((w//2, 15), nombre, fill=(220, 220, 220), anchor="mm")
-
-    # Barra inferior con el patrón
     draw.rectangle([0, h-38, w, h], fill=(0, 0, 0))
     seq = "  ".join(str(i+1)+"."+ec(p) for i, p in enumerate(patron))
     draw.text((w//2, h-19), seq, fill=(255, 255, 255), anchor="mm")
-
     buf = io.BytesIO()
     img.save(buf, format="PNG")
     return buf.getvalue()
 
 def crear_img_stats(cap_bytes, nombre, patron, paso_acierto):
-    """
-    Imagen de estadísticas:
-    - Captura real del banner ganador (limpia, sin overlay)
-    - Solo nombre de mesa arriba
-    - Sin texto encima del banner
-    """
+    """Captura tal cual (con el nombre ORIGINAL de la mesa y el banner ganador)."""
     img = Image.open(io.BytesIO(cap_bytes)).convert("RGB")
-    draw = ImageDraw.Draw(img)
-    w, h = img.size
-
-    # Solo barra superior con nombre
-    draw.rectangle([0, 0, w, 30], fill=(10, 10, 20))
-    draw.text((w//2, 15), nombre, fill=(220, 220, 220), anchor="mm")
-
     buf = io.BytesIO()
     img.save(buf, format="PNG")
     return buf.getvalue()
@@ -316,15 +236,11 @@ async def enviar_foto(bot, chat_id, img_bytes, caption):
         with open(nombre_arch, "wb") as f:
             f.write(img_bytes)
         log.info("[PRUEBA] (NO enviado a Telegram) imagen -> " + nombre_arch)
-        log.info("[PRUEBA] caption:\n" + caption)
+        log.info("[PRUEBA] caption: " + caption.replace(chr(10), " | "))
         return True
     try:
-        await bot.send_photo(
-            chat_id=chat_id,
-            photo=io.BytesIO(img_bytes),
-            caption=caption,
-            parse_mode="Markdown"
-        )
+        await bot.send_photo(chat_id=chat_id, photo=io.BytesIO(img_bytes),
+                             caption=caption, parse_mode="Markdown")
         return True
     except TelegramError as e:
         log.error("Error Telegram foto: " + str(e))
@@ -341,7 +257,7 @@ async def enviar_texto(bot, chat_id, texto):
         log.error("Error Telegram texto: " + str(e))
         return False
 
-# ── Caption de señal ──────────────────────────────────────────
+# ── Captions ──────────────────────────────────────────────────
 def caption_senal(nombre, patron):
     seq = "  ".join(str(i+1)+"."+ec(p) for i, p in enumerate(patron))
     return "🃏 *" + nombre + "*\n\n" + seq
@@ -363,7 +279,6 @@ class DetectorCambio:
     def __init__(self):
         self._ultimo = None
         self._t = 0.0
-
     def es_nuevo(self, r):
         if r is None:
             return False
@@ -379,75 +294,67 @@ async def loop_mesa(mesa_cfg, bot, estado, detector):
     nombre      = mesa_cfg["nombre"]
     region      = mesa_cfg["region"]
     banner_roi  = mesa_cfg["banner_roi"]
-
     log.info("▶ Iniciando mesa: " + nombre)
-
-    # Estado inicial
     historial   = estado["historial"]
     patron      = estado["patron"]
-    paso        = estado["paso"]      # paso actual en la secuencia (1-6)
-    en_secuencia = estado["en_secuencia"]  # True si ya se envió señal y esperamos resultado
+    paso        = estado["paso"]
+    en_secuencia = estado["en_secuencia"]
 
     while True:
         try:
             await asyncio.sleep(INTERVALO_CAPTURA)
 
-            # ── Pausa global ──────────────────────────────────
             if en_pausa_global():
                 restante = int(pausa_global_hasta - time.time())
                 if restante % 60 == 0:
                     log.info("[" + nombre + "] En pausa global — " + str(restante//60) + " min restantes")
                 continue
 
-            # ── Capturar y detectar ───────────────────────────
             img_bgr = capturar(region)
             if MODO_PRUEBA:
-                _pa, _pr = contar_banner(img_bgr, banner_roi)
-                log.info("[%s] azul=%d rojo=%d" % (nombre, _pa, _pr))
+                _pa, _pr, _pv = contar_banner(img_bgr, banner_roi)
+                log.info("[%s] azul=%d rojo=%d verde=%d" % (nombre, _pa, _pr, _pv))
             resultado_raw = detectar_banner(img_bgr, banner_roi)
 
             if not detector.es_nuevo(resultado_raw):
                 continue
 
-            # ── Confirmar resultado estable ───────────────────
             log.info("[" + nombre + "] Banner detectado: " + str(resultado_raw) + " — confirmando...")
             resultado = await asyncio.get_event_loop().run_in_executor(
                 None,
-                lambda: confirmar_resultado(region, banner_roi, intentos=3, espera=1.2)
+                lambda: confirmar_resultado(region, banner_roi, intentos=3, espera=0.4)
             )
 
             if resultado is None:
                 log.info("[" + nombre + "] No confirmado — ignorando")
                 continue
 
+            # ── EMPATE: es un PUSH. No gana ni pierde, NO avanza el movimiento ─
             if resultado == EMPATE:
-                log.info("[" + nombre + "] Empate — sin acción")
+                log.info("[%s] EMPATE — push: no gana ni pierde, se mantiene el movimiento %d" % (nombre, paso))
                 historial.append(EMPATE)
                 continue
 
             log.info("[" + nombre + "] Resultado confirmado: " + resultado)
             historial.append(resultado)
 
-            # Captura limpia del banner para usar en mensajes
-            cap = capturar_bytes(region)
+            # Reusar el frame que YA detectó el banner para que la imagen
+            # SIEMPRE muestre el banner del color ganador.
+            _ok, _buf = cv2.imencode('.png', img_bgr)
+            cap = _buf.tobytes() if _ok else capturar_bytes(region)
 
-            # ── ¿Estamos en una secuencia activa? ─────────────
             if en_secuencia and patron and paso <= PASOS:
                 prediccion = patron[paso - 1]
                 acerto = prediccion == resultado
-
                 if acerto:
-                    # ── GANADA ────────────────────────────────
                     log.info("[" + nombre + "] GANADA en intento " + str(paso))
                     img_stats = crear_img_stats(cap, nombre, patron, paso)
                     await enviar_foto(bot, CANAL_ESTADISTICAS_ID, img_stats,
                                       caption_ganada(nombre, patron, paso))
-                    # Reset secuencia
                     en_secuencia = False
                     paso = 1
-
+                    iniciar_lapso_mesa(nombre)
                 elif paso >= PASOS:
-                    # ── PERDIDA ───────────────────────────────
                     log.info("[" + nombre + "] PERDIDA — activando pausa global 30 min")
                     img_stats = crear_img_stats(cap, nombre, patron, paso)
                     await enviar_foto(bot, CANAL_ESTADISTICAS_ID, img_stats,
@@ -455,44 +362,36 @@ async def loop_mesa(mesa_cfg, bot, estado, detector):
                     activar_pausa_global()
                     en_secuencia = False
                     paso = 1
-                    # Guardar estado
+                    iniciar_lapso_mesa(nombre)
                     estado["historial"]    = historial
                     estado["patron"]       = patron
                     estado["paso"]         = paso
                     estado["en_secuencia"] = en_secuencia
                     continue
-
                 else:
-                    # ── SIGUIENTE PASO ────────────────────────
                     paso += 1
                     log.info("[" + nombre + "] Fallo → ahora en paso " + str(paso))
                     estado["paso"] = paso
                     continue
 
-            # ── Nueva señal ───────────────────────────────────
-            # Espaciado POR MESA (creciente) + anti-ráfaga global
+            # ── Nueva señal (con espaciado por mesa + anti-ráfaga) ─
             if not senal_permitida(nombre):
                 objetivo = max(proxima_senal_por_mesa.get(nombre, 0.0), proxima_senal_global)
                 restante = int(objetivo - time.time())
                 log.info("[" + nombre + "] Oportunidad de señal, pero en espaciado — faltan " + str(restante) + "s")
                 continue
 
-            # Elegir patrón basado en historial y último resultado
             patron = elegir_patron(historial, resultado)
             paso = 1
             en_secuencia = True
-
             log.info("[" + nombre + "] Nueva señal — patrón: " +
                      " ".join(ec(p) for p in patron))
-
-            # Captura con el banner del resultado recién terminado
             img_senal = crear_img_senal(cap, nombre, patron)
             await enviar_foto(bot, CANAL_SENALES_ID, img_senal,
                               caption_senal(nombre, patron))
-            registrar_senal_enviada(nombre)
+            marcar_antirrafaga()
             log.info("[" + nombre + "] Señal enviada")
 
-            # Guardar estado
             estado["historial"]    = historial
             estado["patron"]       = patron
             estado["paso"]         = paso
@@ -511,7 +410,6 @@ async def main():
     bot = Bot(token=TELEGRAM_TOKEN)
     if MODO_PRUEBA:
         print("🧪 MODO PRUEBA ACTIVO — NO se enviará nada a Telegram.")
-        print("   (Las imágenes que enviaría se guardan en la carpeta prueba_envios/)")
         try:
             me = await bot.get_me()
             print("✅ Token válido: @" + me.username)
@@ -531,22 +429,13 @@ async def main():
     print("⏸  Pausa tras pérdida: 30 minutos globales")
     print("\n🚀 Monitoreando — minimiza esta ventana y deja Rushbet al frente\n")
 
-    # Estado inicial por mesa
     estados    = {}
     detectores = {}
     for m in mesas_activas:
-        estados[m["nombre"]] = {
-            "historial":    [],
-            "patron":       [],
-            "paso":         1,
-            "en_secuencia": False,
-        }
+        estados[m["nombre"]] = {"historial": [], "patron": [], "paso": 1, "en_secuencia": False}
         detectores[m["nombre"]] = DetectorCambio()
 
-    tasks = [
-        loop_mesa(m, bot, estados[m["nombre"]], detectores[m["nombre"]])
-        for m in mesas_activas
-    ]
+    tasks = [loop_mesa(m, bot, estados[m["nombre"]], detectores[m["nombre"]]) for m in mesas_activas]
     await asyncio.gather(*tasks)
 
 if __name__ == "__main__":
